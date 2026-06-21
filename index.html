@@ -1,0 +1,1873 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ComprobantePE – Scanner SUNAT</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg:       #0F1117;
+    --surface:  #1A1D27;
+    --surface2: #22263A;
+    --border:   #2E3350;
+    --accent:   #4F8EF7;
+    --accent2:  #7B5CF6;
+    --success:  #22C55E;
+    --warn:     #F59E0B;
+    --danger:   #EF4444;
+    --text:     #E8EAF2;
+    --text2:    #8890AA;
+    --text3:    #5A6080;
+    --radius:   12px;
+    --radius-sm:8px;
+    --mono:     'JetBrains Mono', monospace;
+    --sans:     'Inter', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar-logo {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .topbar-logo .icon {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+  }
+  .topbar-logo .brand { font-weight: 700; font-size: 15px; letter-spacing: -0.3px; }
+  .topbar-logo .brand span { color: var(--accent); }
+  .topbar-logo .sub { font-size: 11px; color: var(--text3); font-weight: 400; }
+  .topbar-stats {
+    display: flex; gap: 16px; align-items: center;
+  }
+  .stat-pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--text2);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .stat-pill strong { color: var(--text); font-weight: 600; }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    height: calc(100vh - 57px);
+  }
+
+  /* ── LEFT PANEL ── */
+  .left-panel {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text3);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(79,142,247,0.05);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-zone .dz-icon { font-size: 32px; margin-bottom: 8px; }
+  .drop-zone .dz-title { font-weight: 600; font-size: 13px; color: var(--text); margin-bottom: 4px; }
+  .drop-zone .dz-sub { font-size: 11px; color: var(--text3); }
+
+  /* Preview */
+  .preview-wrap {
+    display: none;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    position: relative;
+    background: #000;
+  }
+  .preview-wrap img {
+    width: 100%; max-height: 180px; object-fit: contain; display: block;
+  }
+  .preview-close {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(0,0,0,0.7); border: none; cursor: pointer;
+    color: #fff; border-radius: 50%; width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  /* OCR Status */
+  .ocr-status {
+    display: none;
+    margin-top: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+  }
+  .ocr-status .status-row {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+  }
+  .ocr-status .status-text { font-size: 12px; color: var(--text2); }
+  .progress-bar-wrap {
+    background: var(--border); border-radius: 4px; height: 4px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    height: 4px; border-radius: 4px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* OCR Raw text */
+  .ocr-raw {
+    display: none;
+  }
+  .ocr-raw textarea {
+    width: 100%;
+    height: 100px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 8px;
+    resize: vertical;
+    outline: none;
+  }
+
+  /* Tipo selector */
+  .tipo-tabs {
+    display: flex; gap: 4px; flex-wrap: wrap;
+  }
+  .tipo-tab {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text2);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--sans);
+  }
+  .tipo-tab:hover { border-color: var(--accent); color: var(--text); }
+  .tipo-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* Form fields */
+  .fields-scroll { overflow-y: auto; flex: 1; }
+  .field-group { padding: 12px 16px; border-bottom: 1px solid rgba(46,51,80,0.5); }
+  .field-group-title {
+    font-size: 10px; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  .field-row { margin-bottom: 8px; }
+  .field-row label {
+    display: block; font-size: 11px; color: var(--text3);
+    margin-bottom: 3px; font-weight: 500;
+  }
+  .field-row input, .field-row select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 6px 9px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field-row input:focus, .field-row select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(79,142,247,0.15);
+  }
+  .field-row input.auto-filled { border-color: var(--success); }
+  .field-row select option { background: var(--surface); }
+
+  .field-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .field-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+
+  .badge-extracted {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; color: var(--success);
+    font-weight: 500;
+  }
+
+  /* Buttons */
+  .btn {
+    border: none; cursor: pointer; border-radius: var(--radius-sm);
+    font-family: var(--sans); font-weight: 600; transition: all 0.15s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    padding: 9px 16px; font-size: 13px; width: 100%;
+    border-radius: var(--radius);
+  }
+  .btn-primary:hover { background: #3d7ef0; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary {
+    background: var(--surface2); color: var(--text2);
+    border: 1px solid var(--border);
+    padding: 7px 14px; font-size: 12px;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--text); }
+  .btn-danger { background: rgba(239,68,68,0.12); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); padding: 7px 14px; font-size: 12px; }
+  .btn-danger:hover { background: rgba(239,68,68,0.22); }
+  .btn-success { background: rgba(34,197,94,0.12); color: var(--success); border: 1px solid rgba(34,197,94,0.2); padding: 7px 14px; font-size: 12px; }
+  .btn-success:hover { background: rgba(34,197,94,0.22); }
+
+  .action-bar {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .action-bar-row { display: flex; gap: 8px; }
+
+  /* ── RIGHT PANEL ── */
+  .right-panel {
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .panel-toolbar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .toolbar-left { display: flex; align-items: center; gap: 8px; flex: 1; }
+  .toolbar-right { display: flex; gap: 8px; }
+
+  .search-input-wrap {
+    position: relative; flex: 1; max-width: 300px;
+  }
+  .search-input-wrap input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 6px 9px 6px 30px;
+    outline: none;
+  }
+  .search-input-wrap input:focus { border-color: var(--accent); }
+  .search-icon {
+    position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+    color: var(--text3); font-size: 13px; pointer-events: none;
+  }
+
+  .filter-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text2);
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 6px 9px;
+    outline: none;
+    cursor: pointer;
+  }
+  .filter-select:focus { border-color: var(--accent); }
+  .filter-select option { background: var(--surface); }
+
+  /* Table */
+  .table-wrap {
+    flex: 1; overflow: auto;
+  }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+  }
+  thead { position: sticky; top: 0; z-index: 10; }
+  thead th {
+    background: var(--surface);
+    color: var(--text3);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  thead th:hover { color: var(--text); }
+  thead th .sort-icon { margin-left: 4px; opacity: 0.4; }
+  thead th.sorted .sort-icon { opacity: 1; color: var(--accent); }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(46,51,80,0.4);
+    transition: background 0.1s;
+  }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td {
+    padding: 9px 12px; color: var(--text2); vertical-align: middle;
+  }
+  tbody td.mono { font-family: var(--mono); font-size: 11px; color: var(--text); }
+  tbody td.monto { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text); text-align: right; }
+
+  .tipo-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 5px; padding: 2px 8px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.04em; white-space: nowrap;
+  }
+  .tipo-F { background: rgba(79,142,247,0.15); color: #7AABFF; border: 1px solid rgba(79,142,247,0.3); }
+  .tipo-B { background: rgba(34,197,94,0.12); color: #4ADE80; border: 1px solid rgba(34,197,94,0.25); }
+  .tipo-H { background: rgba(245,158,11,0.12); color: #FCD34D; border: 1px solid rgba(245,158,11,0.25); }
+  .tipo-N { background: rgba(239,68,68,0.12); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.25); }
+  .tipo-T { background: rgba(123,92,246,0.15); color: #C4B5FD; border: 1px solid rgba(123,92,246,0.3); }
+
+  .action-cell { display: flex; gap: 4px; }
+  .btn-icon {
+    width: 26px; height: 26px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text3);
+    border-radius: 6px; cursor: pointer; font-size: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all 0.15s; font-family: sans-serif;
+  }
+  .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-icon.del:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* Empty state */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; color: var(--text3); text-align: center; padding: 40px;
+    gap: 12px;
+  }
+  .empty-state .empty-icon { font-size: 48px; opacity: 0.3; }
+  .empty-state .empty-title { font-size: 16px; font-weight: 600; color: var(--text2); }
+  .empty-state .empty-sub { font-size: 12px; max-width: 280px; }
+
+  /* Footer totals */
+  .table-footer {
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; gap: 24px; align-items: center; flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .total-item { font-size: 11px; color: var(--text3); display: flex; gap: 6px; align-items: center; }
+  .total-item strong { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
+  .total-item.highlight strong { color: var(--accent); }
+
+  /* ── MODAL OVERLAY ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 200;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-width: 700px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title { font-weight: 700; font-size: 15px; }
+  .modal-close {
+    background: none; border: none; color: var(--text3);
+    cursor: pointer; font-size: 18px; line-height: 1;
+  }
+  .modal-body { padding: 20px; }
+  .modal-footer {
+    padding: 14px 20px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+
+  /* Toast */
+  .toast-container {
+    position: fixed; bottom: 20px; right: 20px; z-index: 300;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .toast {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 16px; font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+    animation: slideIn 0.2s ease;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    max-width: 320px;
+  }
+  .toast.success { border-left: 3px solid var(--success); }
+  .toast.error { border-left: 3px solid var(--danger); }
+  .toast.info { border-left: 3px solid var(--accent); }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; } }
+
+  /* Confidence indicators */
+  .conf-dot {
+    width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 2px;
+  }
+  .conf-high { background: var(--success); }
+  .conf-med { background: var(--warn); }
+  .conf-low { background: var(--danger); }
+
+  /* Moneda */
+  .tag-sol { color: #FCD34D; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .tag-usd { color: #6EE7B7; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
+    .left-panel { border-right: none; border-bottom: 1px solid var(--border); height: auto; max-height: none; }
+    .right-panel { min-height: 400px; }
+    .topbar-stats { display: none; }
+    .fields-scroll { max-height: 300px; }
+  }
+
+  /* Highlight auto-fill */
+  @keyframes highlight { 0%{background:rgba(79,142,247,0.2)} 100%{background:transparent} }
+  .highlight-anim { animation: highlight 1s ease; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo">
+    <div class="icon">📄</div>
+    <div>
+      <div class="brand">Comprobante<span>PE</span></div>
+      <div class="sub">Scanner SUNAT · Lima, Perú</div>
+    </div>
+  </div>
+  <div class="topbar-stats">
+    <div class="stat-pill">📑 <strong id="stat-total">0</strong> docs</div>
+    <div class="stat-pill">🟡 IGV <strong id="stat-igv">S/ 0.00</strong></div>
+    <div class="stat-pill">💰 Total <strong id="stat-sum">S/ 0.00</strong></div>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT PANEL: Scanner + Form -->
+  <div class="left-panel">
+
+    <!-- DROP ZONE -->
+    <div class="panel-section">
+      <div class="panel-label">Escanear Comprobante</div>
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept="image/*,application/pdf" multiple>
+        <div class="dz-icon">📄</div>
+        <div class="dz-title">Subir imagen o PDF</div>
+        <div class="dz-sub">JPG, PNG, WEBP, <strong style="color:var(--accent)">PDF</strong> · Arrastra aquí también</div>
+      </div>
+      <div class="preview-wrap" id="preview-wrap">
+        <img id="preview-img" src="" alt="preview">
+        <button class="preview-close" id="preview-close">✕</button>
+      </div>
+      <!-- PDF preview -->
+      <div class="preview-wrap" id="pdf-preview-wrap" style="display:none;flex-direction:column;gap:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,0.5);">
+          <span id="pdf-filename" style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;"></span>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <button class="btn-icon" id="pdf-prev" title="Página anterior" style="font-size:10px;">◀</button>
+            <span id="pdf-page-info" style="font-size:11px;color:var(--text2);white-space:nowrap;font-family:var(--mono);">1/1</span>
+            <button class="btn-icon" id="pdf-next" title="Página siguiente" style="font-size:10px;">▶</button>
+            <button class="btn-icon" id="pdf-ocr-page" title="OCR esta página" style="font-size:10px;border-color:var(--accent);color:var(--accent);">🔍</button>
+            <button class="btn-icon" id="pdf-ocr-all" title="OCR todas las páginas" style="font-size:10px;border-color:var(--accent2);color:var(--accent2);">📑</button>
+            <button class="preview-close" id="pdf-close" style="position:static;">✕</button>
+          </div>
+        </div>
+        <canvas id="pdf-canvas" style="width:100%;display:block;background:#1a1a1a;"></canvas>
+        <div id="pdf-text-layer" style="display:none;"></div>
+      </div>
+      <div class="ocr-status" id="ocr-status">
+        <div class="status-row">
+          <div class="spinner" id="ocr-spinner"></div>
+          <div class="status-text" id="ocr-status-text">Iniciando OCR…</div>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="ocr-progress"></div>
+        </div>
+      </div>
+      <div class="ocr-raw" id="ocr-raw-wrap" style="margin-top:8px;">
+        <div class="panel-label" style="margin-bottom:4px;">Texto reconocido <span class="badge-extracted" id="conf-badge"></span></div>
+        <textarea id="ocr-raw-text" readonly placeholder="El texto OCR aparecerá aquí…"></textarea>
+      </div>
+    </div>
+
+    <!-- TIPO SELECTOR -->
+    <div class="panel-section">
+      <div class="panel-label">Tipo de documento</div>
+      <div class="tipo-tabs" id="tipo-tabs">
+        <button class="tipo-tab active" data-tipo="FAC">Factura</button>
+        <button class="tipo-tab" data-tipo="BOL">Boleta</button>
+        <button class="tipo-tab" data-tipo="HON">Honorarios</button>
+        <button class="tipo-tab" data-tipo="NC">N. Crédito</button>
+        <button class="tipo-tab" data-tipo="ND">N. Débito</button>
+        <button class="tipo-tab" data-tipo="TK">Ticket</button>
+      </div>
+    </div>
+
+    <!-- CAMPOS DINÁMICOS -->
+    <div class="fields-scroll" id="fields-scroll">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- BOTONES -->
+    <div class="action-bar">
+      <button class="btn btn-primary" id="btn-guardar" onclick="guardarDocumento()">
+        ✅ Guardar Comprobante
+      </button>
+      <div class="action-bar-row">
+        <button class="btn btn-secondary" style="flex:1" onclick="limpiarFormulario()">🔄 Limpiar</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="openModal('modal-camera')">📷 Cámara</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: Table -->
+  <div class="right-panel">
+    <div class="panel-toolbar">
+      <div class="toolbar-left">
+        <div class="search-input-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Buscar por RUC, número, razón social…" oninput="renderTable()">
+        </div>
+        <select class="filter-select" id="filter-tipo" onchange="renderTable()">
+          <option value="">Todos los tipos</option>
+          <option value="FAC">Facturas</option>
+          <option value="BOL">Boletas</option>
+          <option value="HON">Honorarios</option>
+          <option value="NC">N. Crédito</option>
+          <option value="ND">N. Débito</option>
+          <option value="TK">Tickets</option>
+        </select>
+        <select class="filter-select" id="filter-mes" onchange="renderTable()">
+          <option value="">Todos los meses</option>
+        </select>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-success btn-icon" onclick="exportarExcel()" title="Exportar Excel" style="width:auto;padding:0 12px;gap:5px;font-size:12px;">
+          📊 Excel
+        </button>
+        <button class="btn btn-secondary btn-icon" onclick="exportarCSV()" title="Exportar CSV" style="width:auto;padding:0 10px;gap:5px;font-size:12px;">
+          📁 CSV
+        </button>
+        <button class="btn btn-danger btn-icon" onclick="confirmarLimpiarTodo()" title="Limpiar todos los datos" style="width:auto;padding:0 10px;">
+          🗑️
+        </button>
+      </div>
+    </div>
+
+    <div class="table-wrap" id="table-wrap">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">📂</div>
+        <div class="empty-title">Sin comprobantes registrados</div>
+        <div class="empty-sub">Sube una foto de una factura, boleta o recibo para empezar a extraer datos automáticamente.</div>
+      </div>
+      <table id="main-table" style="display:none;">
+        <thead id="table-head"></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <div class="table-footer" id="table-footer">
+      <div class="total-item">Registros: <strong id="footer-count">0</strong></div>
+      <div class="total-item">Op. Gravadas: <strong id="footer-gravada">S/ 0.00</strong></div>
+      <div class="total-item">IGV Total: <strong id="footer-igv">S/ 0.00</strong></div>
+      <div class="total-item highlight">Total General: <strong id="footer-total">S/ 0.00</strong></div>
+      <div class="total-item" style="margin-left:auto;">
+        <span id="footer-retenciones" style="color:var(--warn);font-size:11px;"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Cámara en vivo (fallback) -->
+<div class="modal-overlay" id="modal-camera">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📷 Cámara en vivo</span>
+      <button class="modal-close" onclick="closeModal('modal-camera'); stopCamera()">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center;">
+      <video id="camera-video" autoplay playsinline style="width:100%;border-radius:8px;border:1px solid var(--border);max-height:300px;object-fit:cover;background:#000;"></video>
+      <canvas id="camera-canvas" style="display:none;"></canvas>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-camera'); stopCamera()">Cancelar</button>
+      <button class="btn btn-primary" style="width:auto;padding:9px 24px;" onclick="captureFromCamera()">📸 Capturar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Ver detalle -->
+<div class="modal-overlay" id="modal-detalle">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📄 Detalle del Comprobante</span>
+      <button class="modal-close" onclick="closeModal('modal-detalle')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-detalle-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-detalle')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  ESTADO Y PERSISTENCIA
+// ═══════════════════════════════════════════════════════
+const STORAGE_KEY = 'comprobantePE_v3';
+let documentos = [];
+let tipoActivo = 'FAC';
+let sortCol = 'fecha';
+let sortDir = -1;
+let editingId = null;
+let cameraStream = null;
+
+function loadStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) documentos = JSON.parse(raw);
+  } catch(e) { documentos = []; }
+}
+function saveStorage() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(documentos));
+  updateStats();
+}
+
+// ═══════════════════════════════════════════════════════
+//  DEFINICIÓN DE CAMPOS POR TIPO (SUNAT PERÚ COMPLETO)
+// ═══════════════════════════════════════════════════════
+const TIPOS = {
+  FAC: {
+    label: 'Factura Electrónica',
+    emoji: '🟦',
+    grupos: [
+      { titulo: 'Identificación del Emisor', campos: [
+        { id:'ruc_emisor',     label:'RUC del Emisor',        type:'text', mono:true, hint:'20 dígitos empieza en 10 o 20' },
+        { id:'razon_social',   label:'Razón Social / Emisor', type:'text' },
+        { id:'direccion',      label:'Dirección Emisor',      type:'text' },
+      ]},
+      { titulo: 'Datos del Documento', campos: [
+        { id:'serie_numero',   label:'Serie-Número',          type:'text', mono:true, hint:'F001-00001234' },
+        { id:'fecha_emision',  label:'Fecha de Emisión',      type:'date' },
+        { id:'fecha_venc',     label:'Fecha de Vencimiento',  type:'date' },
+        { id:'moneda',         label:'Moneda',                type:'select', opts:['PEN – Soles','USD – Dólares','EUR – Euros'] },
+      ]},
+      { titulo: 'Datos del Adquirente', campos: [
+        { id:'ruc_cliente',    label:'RUC Cliente',           type:'text', mono:true },
+        { id:'razon_cliente',  label:'Razón Social Cliente',  type:'text' },
+      ]},
+      { titulo: 'Importes (IGV 18%)', campos: [
+        { id:'op_gravada',     label:'Op. Gravadas (Base imponible)', type:'number', hint:'Sin IGV' },
+        { id:'op_exonerada',   label:'Op. Exoneradas',        type:'number' },
+        { id:'op_inafecta',    label:'Op. Inafectas',         type:'number' },
+        { id:'igv',            label:'IGV (18%)',             type:'number', hint:'Auto-calculado' },
+        { id:'descuento',      label:'Descuentos / Cargos',   type:'number' },
+        { id:'total',          label:'IMPORTE TOTAL',         type:'number', bold:true },
+      ]},
+      { titulo: 'Forma de Pago', campos: [
+        { id:'forma_pago',     label:'Forma de Pago',         type:'select', opts:['Contado','Crédito','Transferencia','Efectivo','Tarjeta'] },
+        { id:'cuotas',         label:'N° Cuotas (si crédito)',type:'number' },
+      ]},
+      { titulo: 'Trazabilidad', campos: [
+        { id:'hash',           label:'Hash QR (código de barras)',    type:'text', mono:true },
+        { id:'cdr',            label:'CDR / Estado SUNAT',    type:'select', opts:['Aceptado','Observado','Rechazado','Por verificar'] },
+        { id:'obs',            label:'Observaciones',         type:'text' },
+      ]},
+    ]
+  },
+  BOL: {
+    label: 'Boleta de Venta',
+    emoji: '🟩',
+    grupos: [
+      { titulo: 'Emisor', campos: [
+        { id:'ruc_emisor',     label:'RUC del Emisor',        type:'text', mono:true },
+        { id:'razon_social',   label:'Razón Social / Nombre', type:'text' },
+        { id:'direccion',      label:'Dirección',             type:'text' },
+      ]},
+      { titulo: 'Datos del Documento', campos: [
+        { id:'serie_numero',   label:'Serie-Número',          type:'text', mono:true, hint:'B001-00005678' },
+        { id:'fecha_emision',  label:'Fecha de Emisión',      type:'date' },
+        { id:'moneda',         label:'Moneda',                type:'select', opts:['PEN – Soles','USD – Dólares'] },
+      ]},
+      { titulo: 'Datos del Comprador (opcional)', campos: [
+        { id:'dni_cliente',    label:'DNI / CE del Comprador',type:'text', mono:true },
+        { id:'nombre_cliente', label:'Nombre del Comprador',  type:'text' },
+      ]},
+      { titulo: 'Importes', campos: [
+        { id:'op_gravada',     label:'Op. Gravada (implícita)',type:'number' },
+        { id:'igv',            label:'IGV incluido (18%)',    type:'number', hint:'Generalmente no desglosado' },
+        { id:'descuento',      label:'Descuentos',            type:'number' },
+        { id:'total',          label:'PRECIO TOTAL',          type:'number', bold:true },
+      ]},
+      { titulo: 'Trazabilidad', campos: [
+        { id:'cdr',            label:'Estado SUNAT',          type:'select', opts:['Aceptado','Observado','Por verificar'] },
+        { id:'obs',            label:'Observaciones',         type:'text' },
+      ]},
+    ]
+  },
+  HON: {
+    label: 'Recibo por Honorarios',
+    emoji: '🟨',
+    grupos: [
+      { titulo: 'Profesional Emisor', campos: [
+        { id:'ruc_emisor',     label:'RUC Persona Natural (10…)',type:'text', mono:true },
+        { id:'nombre_prof',    label:'Nombre del Profesional',   type:'text' },
+        { id:'especialidad',   label:'Especialidad / Actividad', type:'text' },
+        { id:'direccion',      label:'Dirección',                type:'text' },
+      ]},
+      { titulo: 'Datos del Documento', campos: [
+        { id:'serie_numero',   label:'Serie-Número',             type:'text', mono:true, hint:'E001-0052' },
+        { id:'fecha_emision',  label:'Fecha de Emisión',         type:'date' },
+        { id:'periodo',        label:'Período del Servicio',     type:'text', hint:'Ej: Mayo 2026' },
+        { id:'desc_servicio',  label:'Descripción del Servicio', type:'text' },
+        { id:'moneda',         label:'Moneda',                   type:'select', opts:['PEN – Soles','USD – Dólares'] },
+      ]},
+      { titulo: 'Pagador del Servicio', campos: [
+        { id:'ruc_cliente',    label:'RUC de quien paga',        type:'text', mono:true },
+        { id:'razon_cliente',  label:'Empresa / Persona que paga',type:'text' },
+      ]},
+      { titulo: 'Importes y Retención 4ta Categoría', campos: [
+        { id:'bruto',          label:'Total Honorarios (Bruto)',  type:'number' },
+        { id:'retencion',      label:'Retención 4ta Cat. (8%)',   type:'number', hint:'Si el importe > S/ 1,500' },
+        { id:'total',          label:'NETO A COBRAR',             type:'number', bold:true },
+        { id:'suspension',     label:'Constancia Suspensión',     type:'select', opts:['No aplica','Con suspensión','Sin suspensión'] },
+      ]},
+      { titulo: 'Trazabilidad', campos: [
+        { id:'cdr',            label:'Estado SUNAT',             type:'select', opts:['Aceptado','Por verificar'] },
+        { id:'obs',            label:'Observaciones',            type:'text' },
+      ]},
+    ]
+  },
+  NC: {
+    label: 'Nota de Crédito',
+    emoji: '🔴',
+    grupos: [
+      { titulo: 'Emisor', campos: [
+        { id:'ruc_emisor',     label:'RUC del Emisor',           type:'text', mono:true },
+        { id:'razon_social',   label:'Razón Social',             type:'text' },
+      ]},
+      { titulo: 'Datos del Documento', campos: [
+        { id:'serie_numero',   label:'Serie-Número NC',          type:'text', mono:true, hint:'FC01-00000123' },
+        { id:'fecha_emision',  label:'Fecha de Emisión',         type:'date' },
+        { id:'doc_ref',        label:'Doc. Origen Referenciado', type:'text', mono:true },
+        { id:'motivo',         label:'Motivo de la NC',          type:'select', opts:['Anulación','Descuento','Devolución','Precio errado','Otros'] },
+        { id:'moneda',         label:'Moneda',                   type:'select', opts:['PEN – Soles','USD – Dólares'] },
+      ]},
+      { titulo: 'Importes', campos: [
+        { id:'op_gravada',     label:'Base Imponible',           type:'number' },
+        { id:'igv',            label:'IGV (18%)',                type:'number' },
+        { id:'total',          label:'TOTAL NC',                 type:'number', bold:true },
+      ]},
+      { titulo: 'Trazabilidad', campos: [
+        { id:'cdr',            label:'Estado SUNAT',             type:'select', opts:['Aceptado','Rechazado','Por verificar'] },
+        { id:'obs',            label:'Observaciones',            type:'text' },
+      ]},
+    ]
+  },
+  ND: {
+    label: 'Nota de Débito',
+    emoji: '🟠',
+    grupos: [
+      { titulo: 'Emisor', campos: [
+        { id:'ruc_emisor',     label:'RUC del Emisor',           type:'text', mono:true },
+        { id:'razon_social',   label:'Razón Social',             type:'text' },
+      ]},
+      { titulo: 'Datos del Documento', campos: [
+        { id:'serie_numero',   label:'Serie-Número ND',          type:'text', mono:true, hint:'FD01-00000123' },
+        { id:'fecha_emision',  label:'Fecha de Emisión',         type:'date' },
+        { id:'doc_ref',        label:'Doc. Origen Referenciado', type:'text', mono:true },
+        { id:'motivo',         label:'Motivo de la ND',          type:'select', opts:['Intereses','Gastos adicionales','Penalidad','Otros'] },
+        { id:'moneda',         label:'Moneda',                   type:'select', opts:['PEN – Soles','USD – Dólares'] },
+      ]},
+      { titulo: 'Importes', campos: [
+        { id:'op_gravada',     label:'Base Imponible',           type:'number' },
+        { id:'igv',            label:'IGV (18%)',                type:'number' },
+        { id:'total',          label:'TOTAL ND',                 type:'number', bold:true },
+      ]},
+      { titulo: 'Trazabilidad', campos: [
+        { id:'cdr',            label:'Estado SUNAT',             type:'select', opts:['Aceptado','Rechazado','Por verificar'] },
+        { id:'obs',            label:'Observaciones',            type:'text' },
+      ]},
+    ]
+  },
+  TK: {
+    label: 'Ticket / POS',
+    emoji: '🟣',
+    grupos: [
+      { titulo: 'Emisor', campos: [
+        { id:'ruc_emisor',     label:'RUC del Emisor',           type:'text', mono:true },
+        { id:'razon_social',   label:'Nombre / Local',           type:'text' },
+        { id:'direccion',      label:'Dirección del Local',      type:'text' },
+      ]},
+      { titulo: 'Datos del Documento', campos: [
+        { id:'serie_numero',   label:'N° Ticket / Serie POS',   type:'text', mono:true },
+        { id:'fecha_emision',  label:'Fecha de Emisión',         type:'date' },
+        { id:'hora',           label:'Hora',                     type:'time' },
+        { id:'moneda',         label:'Moneda',                   type:'select', opts:['PEN – Soles','USD – Dólares'] },
+      ]},
+      { titulo: 'Importes', campos: [
+        { id:'op_gravada',     label:'Subtotal (sin IGV)',       type:'number' },
+        { id:'igv',            label:'IGV (18%)',                type:'number' },
+        { id:'descuento',      label:'Descuentos',               type:'number' },
+        { id:'total',          label:'TOTAL',                    type:'number', bold:true },
+      ]},
+      { titulo: 'Adicional', campos: [
+        { id:'metodo_pago',    label:'Método de Pago',           type:'select', opts:['Efectivo','Tarjeta débito','Tarjeta crédito','Yape','Plin','Transferencia'] },
+        { id:'obs',            label:'Observaciones',            type:'text' },
+      ]},
+    ]
+  }
+};
+
+// Columnas de tabla
+const COL_COMUN = [
+  { key:'_idx',         label:'#',          width:'40px' },
+  { key:'tipo',         label:'Tipo',       width:'100px' },
+  { key:'ruc_emisor',   label:'RUC Emisor', width:'110px' },
+  { key:'razon_social', label:'Emisor',     width:'160px' },
+  { key:'serie_numero', label:'Nº Doc',     width:'130px' },
+  { key:'fecha_emision',label:'Fecha',      width:'90px' },
+  { key:'moneda',       label:'Mon',        width:'50px' },
+  { key:'op_gravada',   label:'Base Imponible', width:'110px', num:true },
+  { key:'igv',          label:'IGV',        width:'90px', num:true },
+  { key:'retencion',    label:'Retención',  width:'90px', num:true },
+  { key:'total',        label:'Total',      width:'100px', num:true },
+  { key:'cdr',          label:'SUNAT',      width:'90px' },
+  { key:'_acciones',    label:'',           width:'70px' },
+];
+
+// ═══════════════════════════════════════════════════════
+//  RENDER FORMULARIO
+// ═══════════════════════════════════════════════════════
+function renderForm(tipo) {
+  const def = TIPOS[tipo];
+  const container = document.getElementById('fields-scroll');
+  container.innerHTML = def.grupos.map(g => `
+    <div class="field-group">
+      <div class="field-group-title">${g.titulo}</div>
+      ${g.campos.map(c => renderField(c)).join('')}
+    </div>
+  `).join('');
+
+  // Auto-calc IGV
+  ['op_gravada'].forEach(fid => {
+    const el = document.getElementById('f_' + fid);
+    if (el) el.addEventListener('input', autoCalcIGV);
+  });
+}
+
+function renderField(c) {
+  if (c.type === 'select') {
+    return `<div class="field-row">
+      <label for="f_${c.id}">${c.label}</label>
+      <select id="f_${c.id}" name="${c.id}">
+        <option value="">— Seleccionar —</option>
+        ${(c.opts||[]).map(o=>`<option value="${o}">${o}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+  const extra = c.mono ? 'style="font-family:var(--mono);font-size:11px;"' : '';
+  const bstyle = c.bold ? 'style="font-weight:700;color:var(--accent);"' : '';
+  return `<div class="field-row" ${bstyle}>
+    <label for="f_${c.id}">${c.label}${c.hint?`<span style="color:var(--text3);font-weight:400;margin-left:4px;font-size:10px;">(${c.hint})</span>`:''}</label>
+    <input type="${c.type||'text'}" id="f_${c.id}" name="${c.id}" ${extra} autocomplete="off">
+  </div>`;
+}
+
+function autoCalcIGV() {
+  const base = parseFloat(getField('op_gravada')) || 0;
+  const igvEl = document.getElementById('f_igv');
+  const totalEl = document.getElementById('f_total');
+  if (igvEl) { igvEl.value = (base * 0.18).toFixed(2); }
+  if (totalEl && igvEl) {
+    const exon = parseFloat(getField('op_exonerada')) || 0;
+    const inaf = parseFloat(getField('op_inafecta')) || 0;
+    const desc = parseFloat(getField('descuento')) || 0;
+    totalEl.value = (base + base * 0.18 + exon + inaf - desc).toFixed(2);
+    totalEl.classList.add('highlight-anim');
+    setTimeout(() => totalEl.classList.remove('highlight-anim'), 1000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  OCR CON TESSERACT.JS
+// ═══════════════════════════════════════════════════════
+// ─── PDF.js state ───────────────────────────────────────
+let pdfDoc     = null;
+let pdfCurPage = 1;
+let pdfLib     = null;  // will be set after dynamic import
+
+async function getPdfLib() {
+  if (pdfLib) return pdfLib;
+  // Dynamic import works even though outer script is not module
+  pdfLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.mjs');
+  pdfLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
+  return pdfLib;
+}
+
+// ─── Main dispatcher ────────────────────────────────────
+async function processFile(file) {
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    await openPDF(file);
+  } else {
+    document.getElementById('pdf-preview-wrap').style.display = 'none';
+    showPreview(URL.createObjectURL(file));
+    await runOCR(file);
+  }
+}
+
+// ─── PDF: open, render, extract ─────────────────────────
+async function openPDF(file) {
+  document.getElementById('preview-wrap').style.display = 'none';
+
+  const ocrText = document.getElementById('ocr-status-text');
+  const ocrStatus = document.getElementById('ocr-status');
+  const ocrProgress = document.getElementById('ocr-progress');
+  ocrStatus.style.display = 'block';
+  ocrProgress.style.width = '10%';
+  ocrText.textContent = 'Cargando PDF…';
+
+  try {
+    const pdfjsLib = await getPdfLib();
+    const arrayBuffer = await file.arrayBuffer();
+    pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    pdfCurPage = 1;
+
+    document.getElementById('pdf-filename').textContent = file.name;
+    document.getElementById('pdf-preview-wrap').style.display = 'flex';
+
+    ocrProgress.style.width = '40%';
+    ocrText.textContent = `PDF cargado — ${pdfDoc.numPages} página(s). Intentando extracción de texto nativo…`;
+
+    // Try native text extraction first (fast, accurate for digital PDFs)
+    const nativeText = await extractNativePDFText(pdfDoc);
+    await renderPDFPage(pdfCurPage);
+
+    ocrProgress.style.width = '100%';
+
+    if (nativeText.trim().length > 80) {
+      // Digital PDF — use native text directly
+      ocrText.textContent = `✅ Texto nativo extraído (${pdfDoc.numPages} pág.) — sin necesidad de OCR`;
+      document.getElementById('ocr-raw-wrap').style.display = 'block';
+      document.getElementById('ocr-raw-text').value = nativeText;
+      const confBadge = document.getElementById('conf-badge');
+      confBadge.innerHTML = `<span class="conf-dot conf-high"></span>PDF digital — extracción directa`;
+      extractAndFill(nativeText, tipoActivo);
+      toast(`PDF digital: texto extraído de ${pdfDoc.numPages} página(s) ✅`, 'success');
+    } else {
+      // Scanned PDF — need OCR on page image
+      ocrText.textContent = `PDF escaneado detectado — ejecutando OCR en página 1…`;
+      await ocrPDFPage(pdfCurPage);
+    }
+
+    setTimeout(() => { ocrStatus.style.display = 'none'; }, 4000);
+
+  } catch(err) {
+    ocrText.textContent = '❌ Error al procesar PDF';
+    ocrProgress.style.width = '0%';
+    console.error(err);
+    toast('Error al abrir el PDF. Asegúrate de que no esté protegido con contraseña.', 'error');
+  }
+}
+
+async function extractNativePDFText(doc) {
+  let fullText = '';
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(' ');
+    fullText += `\n--- Página ${p} ---\n` + pageText;
+  }
+  return fullText;
+}
+
+async function renderPDFPage(pageNum) {
+  if (!pdfDoc) return;
+  const page = await pdfDoc.getPage(pageNum);
+  const scale = 1.8; // higher = better OCR quality
+  const viewport = page.getViewport({ scale });
+  const canvas = document.getElementById('pdf-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.height = viewport.height;
+  canvas.width  = viewport.width;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  document.getElementById('pdf-page-info').textContent = `${pageNum}/${pdfDoc.numPages}`;
+  pdfCurPage = pageNum;
+}
+
+async function ocrPDFPage(pageNum) {
+  await renderPDFPage(pageNum);
+  const canvas = document.getElementById('pdf-canvas');
+  canvas.toBlob(async blob => {
+    await runOCR(blob, `página ${pageNum}/${pdfDoc.numPages}`);
+  }, 'image/png');
+}
+
+async function ocrAllPDFPages() {
+  if (!pdfDoc) return;
+  toast(`Ejecutando OCR en ${pdfDoc.numPages} páginas…`, 'info');
+  const ocrText = document.getElementById('ocr-status-text');
+  const ocrStatus = document.getElementById('ocr-status');
+  const ocrProgress = document.getElementById('ocr-progress');
+  ocrStatus.style.display = 'block';
+  let fullText = '';
+  for (let p = 1; p <= pdfDoc.numPages; p++) {
+    ocrText.textContent = `OCR página ${p} de ${pdfDoc.numPages}…`;
+    ocrProgress.style.width = Math.round((p/pdfDoc.numPages)*100) + '%';
+    await renderPDFPage(p);
+    const canvas = document.getElementById('pdf-canvas');
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    const result = await Tesseract.recognize(blob, 'spa+eng');
+    fullText += `\n--- Página ${p} ---\n` + result.data.text;
+  }
+  ocrProgress.style.width = '100%';
+  ocrText.textContent = `✅ OCR completado — ${pdfDoc.numPages} página(s)`;
+  document.getElementById('ocr-raw-wrap').style.display = 'block';
+  document.getElementById('ocr-raw-text').value = fullText;
+  const confBadge = document.getElementById('conf-badge');
+  confBadge.innerHTML = `<span class="conf-dot conf-high"></span>${pdfDoc.numPages} páginas OCR`;
+  extractAndFill(fullText, tipoActivo);
+  toast(`OCR completado en ${pdfDoc.numPages} página(s) ✅`, 'success');
+  setTimeout(() => { ocrStatus.style.display = 'none'; }, 3000);
+}
+
+// ─── OCR on image/blob ───────────────────────────────────
+async function processImage(file) { await runOCR(file); } // legacy alias
+
+async function runOCR(file, label='') {
+  const ocrStatus = document.getElementById('ocr-status');
+  const ocrProgress = document.getElementById('ocr-progress');
+  const ocrText = document.getElementById('ocr-status-text');
+  const rawWrap = document.getElementById('ocr-raw-wrap');
+  const rawArea = document.getElementById('ocr-raw-text');
+
+  ocrStatus.style.display = 'block';
+  ocrProgress.style.width = '5%';
+  ocrText.textContent = label ? `OCR ${label} — cargando…` : 'Cargando motor OCR…';
+
+  try {
+    const result = await Tesseract.recognize(file, 'spa+eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          ocrProgress.style.width = pct + '%';
+          ocrText.textContent = `Reconociendo texto${label?' ('+label+')':''}… ${pct}%`;
+        } else if (m.status === 'loading language traineddata') {
+          ocrText.textContent = 'Cargando datos de idioma…';
+          ocrProgress.style.width = '20%';
+        } else if (m.status === 'initializing api') {
+          ocrText.textContent = 'Inicializando OCR…';
+          ocrProgress.style.width = '10%';
+        }
+      }
+    });
+
+    const text = result.data.text;
+    const conf  = Math.round(result.data.confidence);
+
+    ocrProgress.style.width = '100%';
+    ocrText.textContent = `✅ OCR completado — Confianza: ${conf}%`;
+    rawWrap.style.display = 'block';
+    rawArea.value = text;
+
+    const confBadge = document.getElementById('conf-badge');
+    confBadge.innerHTML = conf >= 75
+      ? `<span class="conf-dot conf-high"></span>${conf}% confianza`
+      : conf >= 50
+        ? `<span class="conf-dot conf-med"></span>${conf}% confianza`
+        : `<span class="conf-dot conf-low"></span>${conf}% — Verifica campos`;
+
+    extractAndFill(text, tipoActivo);
+    setTimeout(() => { ocrStatus.style.display = 'none'; }, 3000);
+    toast('Texto extraído correctamente', 'success');
+
+  } catch(err) {
+    ocrText.textContent = '❌ Error en OCR';
+    ocrProgress.style.width = '0%';
+    console.error(err);
+    toast('Error en reconocimiento OCR. Verifica la imagen.', 'error');
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+//  AUTO-DETECCIÓN DE TIPO DE DOCUMENTO
+// ═══════════════════════════════════════════════════════════════════════
+function detectTipo(text) {
+  if(/\bF\d{3}[-–]\d/i.test(text) || /\bFACTURA\b/i.test(text)) return 'FAC';
+  if(/\bB\d{3}[-–]\d/i.test(text) || /\bBOLETA\b/i.test(text)) return 'BOL';
+  if(/\bE\d{3}[-–]\d/i.test(text) || /HONORARIOS|RECIBO\s+POR\s+HONORARIOS/i.test(text)) return 'HON';
+  if(/NOTA\s+DE\s+CR[ÉE]DITO/i.test(text)) return 'NC';
+  if(/NOTA\s+DE\s+D[ÉE]BITO/i.test(text)) return 'ND';
+  if(/TICKET|\bPOS\b/i.test(text)) return 'TK';
+  return null;
+}
+
+function switchTipo(tipo) {
+  tipoActivo = tipo;
+  document.querySelectorAll('.tipo-tab').forEach(b => b.classList.toggle('active', b.dataset.tipo === tipo));
+  renderForm(tipo);
+  limpiarFormulario();
+  toast('Tipo detectado automáticamente: ' + (TIPOS[tipo]?.label || tipo), 'info');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  PARSER AVANZADO — CONTEXTO POR LÍNEA (Formato SUNAT Perú real)
+//  Soporta: R.U.C. XXXX / R.U.C. N° XXXX / RUC: XXXX / RUC XXXX
+//  Soporta: Sub Total, SUBTOTAL, VALOR VENTA, BASE IMPONIBLE, OP GRAVADA
+//  Soporta: fechas DD/MM/YYYY, DD de mes de YYYY, YYYY-MM-DD
+//  Soporta: montos con y sin S/, con coma o punto como separador
+// ═══════════════════════════════════════════════════════════════════════
+function extractAndFill(rawText, _tipo) {
+  // Trabajar línea por línea para mantener contexto
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  const flat  = lines.join(' ').replace(/\s+/g, ' ');
+
+  // ── 1. RUCS ──────────────────────────────────────────────────────────
+  const allRucLines = [];
+  lines.forEach((line, idx) => {
+    const ms = [...line.matchAll(/\b((?:10|20)\d{9})\b/g)];
+    ms.forEach(m => allRucLines.push({ ruc: m[1], line, idx }));
+  });
+  const allRucs = [...new Set(allRucLines.map(x => x.ruc))];
+
+  let rucEmisor = '', rucCliente = '';
+  for (const { ruc, line } of allRucLines) {
+    const ctx = line.toUpperCase();
+    const esCliente = /CLIENTE|COMPRADOR|DESTINATARIO|ADQUIRENTE|RECEPTOR|\bA:\b/.test(ctx);
+    const esEmisor  = /EMISOR|VENDEDOR|R\.U\.C\.?\s*N[°º]?\s*(?!.*CLIENTE)/i.test(line)
+                   || /^\s*R\.?U\.?C\.?[\s\-:]*(?:N[°º])?\s*(?:10|20)\d/i.test(line);
+    if (esCliente && !rucCliente) rucCliente = ruc;
+    else if ((esEmisor || !esCliente) && !rucEmisor) rucEmisor = ruc;
+  }
+  if (!rucEmisor && allRucs[0]) rucEmisor = allRucs[0];
+  if (!rucCliente && allRucs[1]) rucCliente = allRucs[1];
+
+  // ── 2. SERIE-NÚMERO ───────────────────────────────────────────────────
+  let serieNum = '';
+  const serieRxs = [
+    /\b(F\d{3}[-\s]\d{1,10})\b/i,
+    /\b(B\d{3}[-\s]\d{1,10})\b/i,
+    /\b(E\d{3}[-\s]\d{1,10})\b/i,
+    /\b(F[CD]\d{2}[-\s]\d{1,10})\b/i,
+    /\b([A-Z]{1,2}\d{3}[-\s]\d{1,10})\b/i,
+  ];
+  outer: for (const rx of serieRxs) {
+    for (const line of lines) {
+      const m = line.match(rx);
+      if (m) { serieNum = m[1].replace(/\s/g, '-').toUpperCase(); break outer; }
+    }
+  }
+
+  // ── 3. FECHA ──────────────────────────────────────────────────────────
+  const MESES = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+  let fecha = '';
+  const fechaRxs = [
+    { rx:/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\b/, fn:(m)=>`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` },
+    { rx:/\b(\d{4})[\/-](\d{2})[\/-](\d{2})\b/,     fn:(m)=>`${m[1]}-${m[2]}-${m[3]}` },
+    { rx:/\b(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})\b/i, fn:(m)=>{
+      const mo=String(MESES[m[2].toLowerCase()]||1).padStart(2,'0');
+      return `${m[3]}-${mo}-${m[1].padStart(2,'0')}`;
+    }},
+  ];
+  outerFecha: for (const { rx, fn } of fechaRxs) {
+    for (const line of lines) {
+      const m = line.match(rx);
+      if (m) { fecha = fn(m); break outerFecha; }
+    }
+  }
+
+  // ── 4. MONTOS ─────────────────────────────────────────────────────────
+  function parseMonto(s) {
+    if (!s) return 0;
+    s = s.trim().replace(/\s/g,'');
+    if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(s)) s = s.replace(/\./g,'').replace(',','.');
+    else s = s.replace(/,/g,'');
+    return parseFloat(s) || 0;
+  }
+
+  // IGV
+  let igvVal = 0;
+  const igvRxs = [
+    /I\.?G\.?V\.?\s*[:(]?\s*18\s*%?\s*[):=]?\s*S?\/?\.?\s*([\d,.]+)/i,
+    /I\.?G\.?V\.?\s*[:\-=]\s*S?\/?\.?\s*([\d,.]+)/i,
+    /\bIGV\s*[:\-=]\s*S?\/?\.?\s*([\d,.]+)/i,
+    /IMPUESTO\s+GEN[^0-9]*([\d,.]+)/i,
+  ];
+  outerIgv: for (const rx of igvRxs) {
+    for (const line of lines) {
+      const m = line.match(rx);
+      if (m) { igvVal = parseMonto(m[1]); if(igvVal>0) break outerIgv; }
+    }
+  }
+
+  // Base imponible / Op. Gravada
+  let gravVal = 0;
+  const gravRxs = [
+    /(?:SUB[\s\-]?TOTAL|SUBTOTAL|VALOR\s+VENTA|OP(?:ERACI[ÓO]N)?\s*GRAV|BASE\s*IMP|GRAVAD)[^0-9]*([ \d,.]+)/i,
+    /(?:PRECIO\s+UNIT|VALOR\s+UNIT)[^0-9]*([\d,.]+)/i,
+  ];
+  outerGrav: for (const rx of gravRxs) {
+    for (const line of lines) {
+      const m = line.match(rx);
+      if (m) { gravVal = parseMonto(m[1]); if(gravVal>0) break outerGrav; }
+    }
+  }
+  if (!gravVal && igvVal>0) gravVal = +(igvVal/0.18).toFixed(2);
+
+  // Total
+  let totalVal = 0;
+  const totalRxs = [
+    /IMPORTE\s+TOTAL[^0-9]*([\d,.]+)/i,
+    /TOTAL\s+A\s+PAG[A-Z]+[^0-9]*([\d,.]+)/i,
+    /TOTAL\s+VENTA[^0-9]*([\d,.]+)/i,
+    /TOTAL\s+HONORARIOS[^0-9]*([\d,.]+)/i,
+    /NETO\s+A\s+COBRAR[^0-9]*([\d,.]+)/i,
+    /^\s*TOTAL[:\s]+S?\/?\.?\s*([\d,.]+)/i,
+    /TOTAL[^0-9]*([\d,.]+)/i,
+  ];
+  outerTotal: for (const rx of totalRxs) {
+    for (const line of lines) {
+      const m = line.match(rx);
+      if (m) { totalVal = parseMonto(m[1]); if(totalVal>0) break outerTotal; }
+    }
+  }
+  // Si total es menor que gravada+igv, recalcular
+  if (gravVal>0 && igvVal>0 && totalVal < gravVal+igvVal-0.5) totalVal = +(gravVal+igvVal).toFixed(2);
+  // Fallback: mayor monto del documento
+  if (!totalVal) {
+    const all=[...flat.matchAll(/([\d]{1,3}(?:[,.]\d{3})*(?:[,.]\d{1,2}))/g)].map(m=>parseMonto(m[1])).filter(n=>n>0);
+    if(all.length) totalVal = Math.max(...all);
+  }
+
+  // Retención
+  let retVal = 0;
+  for (const line of lines) {
+    const m=line.match(/(?:RETENCI[ÓO]N|RET\.?\s*4[TA.]*\s*CAT)[^0-9]*([\d,.]+)/i);
+    if(m){ retVal=parseMonto(m[1]); break; }
+  }
+
+  // ── 5. RAZÓN SOCIAL ───────────────────────────────────────────────────
+  const formasLegales = /S\.A\.C\.?|S\.R\.L\.?|E\.I\.R\.L\.?|\bS\.A\b|CORP\.?|GROUP|LTDA|S\.A\.S|SAC\b|SRL\b|EIRL\b/i;
+  let razonSocial = '';
+  const lineaRS = lines.find(l =>
+    l.length > 5 && l.length < 120 &&
+    !/^\d{11}$/.test(l.trim()) &&
+    !/^[A-Z0-9]{1,4}[-–]\d/.test(l) &&
+    !/^[\d,.\/\-]+$/.test(l.trim()) &&
+    formasLegales.test(l)
+  );
+  if (lineaRS) razonSocial = lineaRS.replace(/[|¡!]/g,'').trim().substring(0,80);
+  if (!razonSocial) {
+    for (const line of lines) {
+      const m=line.match(/(?:RAZ[ÓO]N\s+SOCIAL|NOMBRE\s+O\s+RAZ[ÓO]N)\s*[:\-]\s*(.+)/i);
+      if(m){ razonSocial=m[1].trim().substring(0,80); break; }
+    }
+  }
+
+  // ── 6. DIRECCIÓN ──────────────────────────────────────────────────────
+  let direccion = '';
+  for (const line of lines) {
+    const m=line.match(/(?:DIRECCI[OÓ]N|DOMICILIO|DIR\.?\s*FISCAL|AV\.|JR\.|CA\.|URB\.|MZ\.)[:\s.]+(.+)/i);
+    if(m&&m[1].length>5){ direccion=m[1].trim().substring(0,120); break; }
+  }
+
+  // ── 7. RAZÓN SOCIAL CLIENTE ───────────────────────────────────────────
+  let razonCliente = '';
+  const idxC=lines.findIndex(l=>/CLIENTE|DESTINATARIO|COMPRADOR|ADQUIRENTE|RECEPTOR/i.test(l));
+  if(idxC>=0){
+    for(let i=idxC; i<Math.min(idxC+5,lines.length); i++){
+      const cl=lines[i];
+      if(cl.length>5&&!/^\d{11}$/.test(cl.trim())&&!/I\.G\.V|TOTAL|SUBTOTAL|\bRUC\b/i.test(cl)){
+        if(formasLegales.test(cl)||cl.length>10){ razonCliente=cl.replace(/[|¡!]/g,'').trim().substring(0,80); break; }
+      }
+    }
+  }
+
+  // ── 8. MONEDA ─────────────────────────────────────────────────────────
+  let moneda = '';
+  if(/USD|\$\s*\d|\bDÓLAR|\bDOLAR/i.test(flat)) moneda='USD – Dólares';
+  else if(/EUR|€/i.test(flat)) moneda='EUR – Euros';
+  else if(/S\/|\bPEN\b|SOLES/i.test(flat)) moneda='PEN – Soles';
+
+  // ── 9. LLENAR CAMPOS ──────────────────────────────────────────────────
+  const fill = (id, val) => {
+    const el = document.getElementById('f_'+id);
+    if (!el || !val) return;
+    if (el.tagName === 'SELECT') {
+      const opt=[...el.options].find(o=>o.value===val||o.value.startsWith(val.split(' ')[0]));
+      if(opt){ el.value=opt.value; markFilled(el); }
+    } else {
+      el.value = val; markFilled(el);
+    }
+  };
+  function markFilled(el){
+    el.classList.add('auto-filled','highlight-anim');
+    setTimeout(()=>el.classList.remove('highlight-anim'),1500);
+  }
+
+  if(rucEmisor)    fill('ruc_emisor', rucEmisor);
+  if(rucCliente)   { fill('ruc_cliente', rucCliente); if(rucCliente.length===8) fill('dni_cliente', rucCliente); }
+  if(serieNum)     fill('serie_numero', serieNum);
+  if(fecha)        fill('fecha_emision', fecha);
+  if(razonSocial)  { fill('razon_social', razonSocial); fill('nombre_prof', razonSocial); }
+  if(razonCliente) { fill('razon_cliente', razonCliente); fill('nombre_cliente', razonCliente); }
+  if(direccion)    fill('direccion', direccion);
+  if(moneda)       fill('moneda', moneda);
+  if(gravVal>0)    fill('op_gravada', gravVal.toFixed(2));
+  if(igvVal>0)     fill('igv', igvVal.toFixed(2));
+  if(totalVal>0)   fill('total', totalVal.toFixed(2));
+  if(retVal>0)     fill('retencion', retVal.toFixed(2));
+
+  // Auto-detectar tipo por serie y cambiar si difiere
+  const detected = detectTipo(rawText);
+  if(detected && detected !== tipoActivo) switchTipo(detected);
+
+  const filled = [rucEmisor,serieNum,fecha,razonSocial,gravVal||null,igvVal||null,totalVal||null].filter(Boolean).length;
+  if(filled>=3) toast(`✅ ${filled} campos detectados automáticamente`,'success');
+  else if(filled>0) toast('⚠️ Solo ' + filled + ' campos reconocidos — verifica y corrige manualmente','info');
+  else toast('⚠️ No se pudieron extraer datos — intenta con mejor resolución','error');
+}
+
+// ═══════════════════════════════════════════════════════
+//  GUARDAR DOCUMENTO
+// ═══════════════════════════════════════════════════════
+function recogerCampos() {
+  const def = TIPOS[tipoActivo];
+  const data = { tipo: tipoActivo, _tipoLabel: def.label, _ts: Date.now() };
+  def.grupos.forEach(g => g.campos.forEach(c => {
+    const el = document.getElementById('f_' + c.id);
+    if(el) data[c.id] = el.value.trim();
+  }));
+  return data;
+}
+
+function guardarDocumento() {
+  const data = recogerCampos();
+  if(!data.serie_numero && !data.ruc_emisor && !data.total) {
+    toast('Completa al menos: Número de doc, RUC o Total', 'error'); return;
+  }
+  if(editingId !== null) {
+    const idx = documentos.findIndex(d => d._id === editingId);
+    if(idx >= 0) { data._id = editingId; documentos[idx] = data; }
+    editingId = null;
+    toast('Comprobante actualizado', 'info');
+  } else {
+    data._id = Date.now() + Math.random();
+    documentos.push(data);
+    toast('Comprobante guardado ✅', 'success');
+  }
+  saveStorage();
+  renderTable();
+  limpiarFormulario();
+}
+
+function limpiarFormulario() {
+  const def = TIPOS[tipoActivo];
+  def.grupos.forEach(g => g.campos.forEach(c => {
+    const el = document.getElementById('f_' + c.id);
+    if(el) { el.value = ''; el.classList.remove('auto-filled'); }
+  }));
+  document.getElementById('preview-wrap').style.display = 'none';
+  document.getElementById('pdf-preview-wrap').style.display = 'none';
+  document.getElementById('ocr-raw-wrap').style.display = 'none';
+  document.getElementById('ocr-raw-text').value = '';
+  document.getElementById('file-input').value = '';
+  pdfDoc = null;
+  editingId = null;
+  document.getElementById('btn-guardar').textContent = '✅ Guardar Comprobante';
+}
+
+function editarDoc(id) {
+  const doc = documentos.find(d => d._id === id);
+  if(!doc) return;
+  editingId = id;
+
+  // Cambiar tipo si es necesario
+  if(doc.tipo !== tipoActivo) {
+    tipoActivo = doc.tipo;
+    document.querySelectorAll('.tipo-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tipo === tipoActivo);
+    });
+    renderForm(tipoActivo);
+  }
+
+  // Rellenar campos
+  const def = TIPOS[tipoActivo];
+  def.grupos.forEach(g => g.campos.forEach(c => {
+    const el = document.getElementById('f_' + c.id);
+    if(el && doc[c.id] !== undefined) el.value = doc[c.id];
+  }));
+  document.getElementById('btn-guardar').textContent = '💾 Actualizar Comprobante';
+  document.getElementById('fields-scroll').scrollTop = 0;
+  toast('Editando comprobante…', 'info');
+}
+
+function eliminarDoc(id) {
+  if(!confirm('¿Eliminar este comprobante?')) return;
+  documentos = documentos.filter(d => d._id !== id);
+  saveStorage();
+  renderTable();
+  toast('Comprobante eliminado', 'info');
+}
+
+// ═══════════════════════════════════════════════════════
+//  TABLA
+// ═══════════════════════════════════════════════════════
+function renderTable() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const ftipo  = document.getElementById('filter-tipo').value;
+  const fmes   = document.getElementById('filter-mes').value;
+
+  let rows = documentos.filter(d => {
+    if(ftipo && d.tipo !== ftipo) return false;
+    if(fmes && !(d.fecha_emision||'').startsWith(fmes)) return false;
+    if(search) {
+      const haystack = JSON.stringify(d).toLowerCase();
+      if(!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  // Ordenar
+  rows.sort((a,b) => {
+    let va = a[sortCol] || '';
+    let vb = b[sortCol] || '';
+    if(!isNaN(va) && !isNaN(vb)) { va=parseFloat(va)||0; vb=parseFloat(vb)||0; }
+    return va < vb ? -sortDir : va > vb ? sortDir : 0;
+  });
+
+  const empty  = document.getElementById('empty-state');
+  const table  = document.getElementById('main-table');
+  const thead  = document.getElementById('table-head');
+  const tbody  = document.getElementById('table-body');
+
+  if(rows.length === 0 && documentos.length === 0) {
+    empty.style.display  = 'flex';
+    table.style.display  = 'none';
+  } else {
+    empty.style.display  = 'none';
+    table.style.display  = 'table';
+  }
+
+  // Headers
+  thead.innerHTML = '<tr>' + COL_COMUN.map(c => `
+    <th style="width:${c.width}" onclick="sortBy('${c.key}')" class="${sortCol===c.key?'sorted':''}">
+      ${c.label} ${c.key!=='_idx'&&c.key!=='_acciones'?`<span class="sort-icon">${sortCol===c.key?(sortDir>0?'↑':'↓'):'↕'}</span>`:''}
+    </th>`).join('') + '</tr>';
+
+  // Rows
+  let sumGrav=0, sumIGV=0, sumTotal=0, sumRet=0;
+
+  tbody.innerHTML = rows.map((doc, i) => {
+    const grav  = parseFloat(doc.op_gravada)||0;
+    const igv   = parseFloat(doc.igv)||0;
+    const total = parseFloat(doc.total)||0;
+    const ret   = parseFloat(doc.retencion)||0;
+    sumGrav  += grav; sumIGV += igv; sumTotal += total; sumRet += ret;
+
+    const mon = (doc.moneda||'PEN').includes('USD') ? '<span class="tag-usd">USD</span>' : '<span class="tag-sol">S/</span>';
+    const cdrColor = doc.cdr==='Aceptado' ? 'color:var(--success)' : doc.cdr==='Rechazado'?'color:var(--danger)':'color:var(--warn)';
+
+    return `<tr>
+      <td style="color:var(--text3);font-size:11px;">${i+1}</td>
+      <td><span class="tipo-badge tipo-${doc.tipo==='FAC'?'F':doc.tipo==='BOL'?'B':doc.tipo==='HON'?'H':doc.tipo==='NC'?'N':'T'}">${TIPOS[doc.tipo]?.emoji} ${doc.tipo}</span></td>
+      <td class="mono">${doc.ruc_emisor||'—'}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${doc.razon_social||doc.nombre_prof||doc.razon_cliente||'—'}</td>
+      <td class="mono">${doc.serie_numero||'—'}</td>
+      <td>${doc.fecha_emision||'—'}</td>
+      <td>${mon}</td>
+      <td class="monto">${grav?fmtMonto(grav):'—'}</td>
+      <td class="monto">${igv?fmtMonto(igv):'—'}</td>
+      <td class="monto" style="color:var(--warn);">${ret?fmtMonto(ret):'—'}</td>
+      <td class="monto" style="font-size:13px;">${fmtMonto(total)}</td>
+      <td><span style="font-size:11px;${cdrColor}">${doc.cdr||'—'}</span></td>
+      <td><div class="action-cell">
+        <button class="btn-icon" onclick="verDetalle('${doc._id}')" title="Ver detalle">👁</button>
+        <button class="btn-icon" onclick="editarDoc('${doc._id}')" title="Editar">✏️</button>
+        <button class="btn-icon del" onclick="eliminarDoc('${doc._id}')" title="Eliminar">🗑</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  // Foote totals
+  document.getElementById('footer-count').textContent  = rows.length;
+  document.getElementById('footer-gravada').textContent = 'S/ ' + fmtMonto(sumGrav);
+  document.getElementById('footer-igv').textContent     = 'S/ ' + fmtMonto(sumIGV);
+  document.getElementById('footer-total').textContent   = 'S/ ' + fmtMonto(sumTotal);
+  if(sumRet > 0) document.getElementById('footer-retenciones').textContent = `Retenciones 4ta cat: S/ ${fmtMonto(sumRet)}`;
+
+  updateStats();
+  updateMesesFilter();
+}
+
+function fmtMonto(n) {
+  return (+n).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function sortBy(col) {
+  if(sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = 1; }
+  renderTable();
+}
+
+function updateStats() {
+  const tot   = documentos.reduce((a,d)=>a+(parseFloat(d.total)||0), 0);
+  const igv   = documentos.reduce((a,d)=>a+(parseFloat(d.igv)||0), 0);
+  document.getElementById('stat-total').textContent = documentos.length;
+  document.getElementById('stat-igv').textContent   = 'S/ '+fmtMonto(igv);
+  document.getElementById('stat-sum').textContent   = 'S/ '+fmtMonto(tot);
+}
+
+function updateMesesFilter() {
+  const meses = [...new Set(documentos.map(d=>(d.fecha_emision||'').substring(0,7)).filter(Boolean))].sort().reverse();
+  const sel = document.getElementById('filter-mes');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}" ${m===cur?'selected':''}>${m}</option>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  EXPORTAR
+// ═══════════════════════════════════════════════════════
+function exportarExcel() {
+  if(!documentos.length) { toast('No hay datos para exportar','error'); return; }
+  const wb = XLSX.utils.book_new();
+
+  // Hoja 1: Todos los comprobantes
+  const hoja1data = documentos.map((d,i) => ({
+    '#': i+1,
+    'Tipo': TIPOS[d.tipo]?.label || d.tipo,
+    'RUC Emisor': d.ruc_emisor||'',
+    'Razón Social': d.razon_social||d.nombre_prof||'',
+    'Dirección': d.direccion||'',
+    'RUC Cliente': d.ruc_cliente||d.dni_cliente||'',
+    'Razón Social Cliente': d.razon_cliente||d.nombre_cliente||'',
+    'Serie-Número': d.serie_numero||'',
+    'Fecha Emisión': d.fecha_emision||'',
+    'Fecha Venc.': d.fecha_venc||'',
+    'Moneda': (d.moneda||'PEN').split(' ')[0],
+    'Op. Gravada': parseFloat(d.op_gravada)||0,
+    'Op. Exonerada': parseFloat(d.op_exonerada)||0,
+    'Op. Inafecta': parseFloat(d.op_inafecta)||0,
+    'IGV (18%)': parseFloat(d.igv)||0,
+    'Descuento': parseFloat(d.descuento)||0,
+    'Retención 4ta Cat.': parseFloat(d.retencion)||0,
+    'Total': parseFloat(d.total)||0,
+    'Forma de Pago': d.forma_pago||d.metodo_pago||'',
+    'Estado SUNAT': d.cdr||'',
+    'Observaciones': d.obs||'',
+  }));
+
+  const ws1 = XLSX.utils.json_to_sheet(hoja1data);
+  // Ancho columnas
+  ws1['!cols'] = [
+    {wch:4},{wch:20},{wch:13},{wch:30},{wch:25},{wch:13},{wch:25},
+    {wch:15},{wch:12},{wch:12},{wch:7},
+    {wch:13},{wch:13},{wch:13},{wch:10},{wch:10},{wch:14},{wch:10},
+    {wch:14},{wch:12},{wch:25}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Comprobantes');
+
+  // Hoja 2: Resumen por tipo
+  const porTipo = {};
+  documentos.forEach(d => {
+    if(!porTipo[d.tipo]) porTipo[d.tipo] = { tipo: TIPOS[d.tipo]?.label, count:0, gravada:0, igv:0, total:0 };
+    porTipo[d.tipo].count++;
+    porTipo[d.tipo].gravada += parseFloat(d.op_gravada)||0;
+    porTipo[d.tipo].igv     += parseFloat(d.igv)||0;
+    porTipo[d.tipo].total   += parseFloat(d.total)||0;
+  });
+  const ws2 = XLSX.utils.json_to_sheet(Object.values(porTipo).map(r=>({
+    'Tipo': r.tipo, 'Cantidad': r.count,
+    'Base Imponible': +r.gravada.toFixed(2),
+    'IGV': +r.igv.toFixed(2),
+    'Total': +r.total.toFixed(2)
+  })));
+  ws2['!cols'] = [{wch:22},{wch:10},{wch:16},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Resumen por Tipo');
+
+  // Hoja 3: Resumen por mes
+  const porMes = {};
+  documentos.forEach(d => {
+    const m = (d.fecha_emision||'Sin fecha').substring(0,7);
+    if(!porMes[m]) porMes[m] = { mes:m, count:0, gravada:0, igv:0, total:0, retenciones:0 };
+    porMes[m].count++;
+    porMes[m].gravada    += parseFloat(d.op_gravada)||0;
+    porMes[m].igv        += parseFloat(d.igv)||0;
+    porMes[m].total      += parseFloat(d.total)||0;
+    porMes[m].retenciones+= parseFloat(d.retencion)||0;
+  });
+  const ws3 = XLSX.utils.json_to_sheet(Object.entries(porMes).sort().map(([,r])=>({
+    'Mes': r.mes, 'Documentos': r.count,
+    'Base Imponible': +r.gravada.toFixed(2),
+    'IGV': +r.igv.toFixed(2),
+    'Retenciones 4ta Cat.': +r.retenciones.toFixed(2),
+    'Total': +r.total.toFixed(2)
+  })));
+  ws3['!cols'] = [{wch:10},{wch:12},{wch:16},{wch:12},{wch:20},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Resumen Mensual');
+
+  const fname = `ComprobantePE_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  toast('Excel generado: ' + fname, 'success');
+}
+
+function exportarCSV() {
+  if(!documentos.length) { toast('No hay datos para exportar','error'); return; }
+  const campos = ['tipo','ruc_emisor','razon_social','serie_numero','fecha_emision','moneda','op_gravada','igv','retencion','total','cdr','obs'];
+  const headers = ['Tipo','RUC Emisor','Razón Social','Serie-Número','Fecha','Moneda','Base Imponible','IGV','Retención','Total','Estado SUNAT','Obs'];
+  const csv = [headers.join(','), ...documentos.map(d=>campos.map(c=>`"${(d[c]||'').toString().replace(/"/g,'""')}"`).join(','))].join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download = `ComprobantePE_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('CSV generado', 'success');
+}
+
+// ═══════════════════════════════════════════════════════
+//  MODAL DETALLE
+// ═══════════════════════════════════════════════════════
+function verDetalle(id) {
+  const doc = documentos.find(d => d._id == id); // eslint-disable-line
+  if(!doc) return;
+  const def = TIPOS[doc.tipo];
+  const body = document.getElementById('modal-detalle-body');
+  body.innerHTML = def.grupos.map(g => `
+    <div style="margin-bottom:16px;">
+      <div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">${g.titulo}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        ${g.campos.map(c => doc[c.id] ? `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">${c.label}</div>
+            <div style="font-size:12px;color:var(--text);font-family:${c.mono?'var(--mono)':'inherit'};font-weight:${c.bold?700:400};">${doc[c.id]}</div>
+          </div>` : '').join('')}
+      </div>
+    </div>
+  `).join('');
+  openModal('modal-detalle');
+}
+
+// ═══════════════════════════════════════════════════════
+//  CÁMARA EN VIVO
+// ═══════════════════════════════════════════════════════
+async function openCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment', width:{ideal:1920}, height:{ideal:1080} } });
+    document.getElementById('camera-video').srcObject = cameraStream;
+    openModal('modal-camera');
+  } catch(e) {
+    toast('No se pudo acceder a la cámara', 'error');
+  }
+}
+function stopCamera() {
+  if(cameraStream) { cameraStream.getTracks().forEach(t=>t.stop()); cameraStream = null; }
+}
+function captureFromCamera() {
+  const video  = document.getElementById('camera-video');
+  const canvas = document.getElementById('camera-canvas');
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob(blob => {
+    showPreview(URL.createObjectURL(blob));
+    stopCamera();
+    closeModal('modal-camera');
+    processFile(blob);
+  }, 'image/jpeg', 0.92);
+}
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS UI
+// ═══════════════════════════════════════════════════════
+function showPreview(url) {
+  document.getElementById('preview-img').src = url;
+  document.getElementById('preview-wrap').style.display = 'block';
+}
+function getField(id) {
+  const el = document.getElementById('f_'+id); return el ? el.value : '';
+}
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function toast(msg, type='info', duration=3500) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span>${type==='success'?'✅':type==='error'?'❌':'ℹ️'}</span> ${msg}`;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity 0.3s'; setTimeout(()=>t.remove(),300); }, duration);
+}
+function confirmarLimpiarTodo() {
+  if(confirm(`¿Eliminar TODOS los ${documentos.length} comprobantes guardados? Esta acción no se puede deshacer.`)) {
+    documentos = [];
+    localStorage.removeItem(STORAGE_KEY);
+    renderTable();
+    toast('Memoria limpiada','info');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  EVENTOS
+// ═══════════════════════════════════════════════════════
+// Cambio de tipo
+document.querySelectorAll('.tipo-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tipo-tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    tipoActivo = btn.dataset.tipo;
+    renderForm(tipoActivo);
+    limpiarFormulario();
+  });
+});
+
+// File input
+document.getElementById('file-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  processFile(file);
+});
+
+// Preview close
+document.getElementById('preview-close').addEventListener('click', () => {
+  document.getElementById('preview-wrap').style.display = 'none';
+  document.getElementById('file-input').value = '';
+});
+
+// PDF close
+document.getElementById('pdf-close').addEventListener('click', () => {
+  document.getElementById('pdf-preview-wrap').style.display = 'none';
+  document.getElementById('file-input').value = '';
+  pdfDoc = null;
+});
+
+// PDF page navigation
+document.getElementById('pdf-prev').addEventListener('click', async () => {
+  if (pdfDoc && pdfCurPage > 1) await renderPDFPage(pdfCurPage - 1);
+});
+document.getElementById('pdf-next').addEventListener('click', async () => {
+  if (pdfDoc && pdfCurPage < pdfDoc.numPages) await renderPDFPage(pdfCurPage + 1);
+});
+document.getElementById('pdf-ocr-page').addEventListener('click', async () => {
+  if (pdfDoc) await ocrPDFPage(pdfCurPage);
+});
+document.getElementById('pdf-ocr-all').addEventListener('click', async () => {
+  if (pdfDoc) await ocrAllPDFPages();
+});
+
+// Drag & drop
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if(file) processFile(file);
+});
+
+// Cerrar modales al click fuera
+document.querySelectorAll('.modal-overlay').forEach(mo => {
+  mo.addEventListener('click', e => { if(e.target===mo) { closeModal(mo.id); stopCamera(); } });
+});
+
+// Botón cámara
+document.querySelector('[onclick="openModal(\'modal-camera\')"]').addEventListener('click', (e) => {
+  e.preventDefault(); openCamera();
+});
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+loadStorage();
+renderForm(tipoActivo);
+renderTable();
+</script>
+</body>
+</html>
